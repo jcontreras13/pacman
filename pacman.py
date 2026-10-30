@@ -8,6 +8,7 @@ Exercises
 """
 
 from math import acos
+from queue import Queue
 from random import choices
 from turtle import *
 
@@ -18,11 +19,12 @@ path = Turtle(visible=False)
 writer = Turtle(visible=False)
 aim = vector(10, 0)
 pacman = vector(-40, -80)
+ghost_speed = 5
 ghosts = [
-    [vector(-180, 160), vector(10, 0)],
-    [vector(-180, -160), vector(0, 10)],
-    [vector(100, 160), vector(0, -10)],
-    [vector(100, -160), vector(-10, 0)],
+    [vector(-180, 160), ghost_speed*vector(1, 0)],
+    [vector(-180, -160), ghost_speed*vector(0, 1)],
+    [vector(100, 160), ghost_speed*vector(0, -1)],
+    [vector(100, -160), ghost_speed*vector(-1, 0)],
 ]
 # fmt: off
 tiles = [
@@ -48,8 +50,9 @@ tiles = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ]
 # fmt: on
+distance_map:dict[vector,int] = {}
 
-posible_movements = [vector(10, 0), vector(-10, 0), vector(0, 10), vector(0, -10)]
+posible_movements = [vector(1, 0), vector(-1, 0), vector(0, 1), vector(0, -1)]
 
 def square(x, y):
     """Draw square using path at (x, y)."""
@@ -130,6 +133,8 @@ def move():
     goto(pacman.x + 10, pacman.y + 10)
     dot(20, 'yellow')
 
+    createPacmanDistanceMap()
+
     for ghost in ghosts:
         moveGhost(ghost)
 
@@ -148,17 +153,37 @@ def move():
 
 def moveGhost(ghost:tuple[vector,vector])->None:
     """Movement logic for a given ghost"""
-    sorted_dirs = getDir2Pacman(ghost)
-    for dir in sorted_dirs:
-        if(valid(ghost[0]+dir)):
-            ghost[1] = dir
-            break
+    ghost[1] = getDir2Pacman(ghost)
     ghost[0].move(ghost[1])
 
-def getDir2Pacman(ghost:tuple[vector,vector])->list[vector]:
-    """List of directions in order of what would get the ghost closer to pacman"""
-    direct_dir = pacman-ghost[0]
-    return sorted(posible_movements,key=lambda v: acos((v.x * direct_dir.x + v.y * direct_dir.y)/(abs(v)*abs(direct_dir))))
+def getDir2Pacman(ghost:tuple[vector,vector])->vector:
+    """Direction towards getting closer to pacman"""
+    best_dir = (vector(0,0), float('inf'))
+    for new_dir in posible_movements:
+        new_pos = new_dir*ghost_speed+ghost[0]
+        if (valid(new_pos)):
+            dist = distance_map.get((new_pos.x, new_pos.y), float('inf'))
+            if (dist < best_dir[1]):
+                best_dir = (new_dir*ghost_speed, dist)
+    return best_dir[0]
+
+def createPacmanDistanceMap()->None:
+    """Generates a map of how many steps the ghost would need to take to reach pacman using BFS"""
+    global distance_map
+    distance_map = {(pacman.x, pacman.y): 0}
+    q:Queue[vector] = Queue()
+
+    q.put(pacman)
+    while not(q.empty()):
+        current_pos = q.get()
+        current_dist = distance_map[(current_pos.x, current_pos.y)]
+        for new_dir in posible_movements:
+            new_pos = current_pos+new_dir*ghost_speed
+            key = (new_pos.x, new_pos.y)
+            if (valid(new_pos) and key not in distance_map):
+                distance_map[key] = current_dist+1
+                q.put(new_pos)
+
 
 def change(x, y):
     """Change pacman aim if valid."""
